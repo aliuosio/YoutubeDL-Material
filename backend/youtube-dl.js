@@ -60,7 +60,16 @@ const runYoutubeDLProcess = async (url, args, youtubedl_fork = config_api.getCon
         logger.error(err);
         return;
     }
-    const child_process = execa(getYoutubeDLPath(youtubedl_fork), [url, ...args], {maxBuffer: Infinity});
+    // Defensive: --no-clean-info-json (and legacy spelling --no-clean-infojson) is
+    // yt-dlp-only. If the fork actually being executed is youtube-dl/youtube-dlc,
+    // strip it or the binary exits with code 2: "no such option: --no-clean-info-json".
+    // This heals cases where args were generated for yt-dlp but the executed binary
+    // is still youtube-dl (stale binary, config just switched, etc.).
+    let sanitized_args = args;
+    if (youtubedl_fork !== 'yt-dlp' && Array.isArray(args)) {
+        sanitized_args = utils.filterArgs(args, ['--no-clean-info-json', '--no-clean-infojson']);
+    }
+    const child_process = execa(getYoutubeDLPath(youtubedl_fork), [url, ...sanitized_args], {maxBuffer: Infinity});
     const callback = new Promise(async resolve => {
         try {
             const {stdout, stderr} = await child_process;
